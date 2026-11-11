@@ -1,0 +1,13 @@
+This extension idea is mostly for a gaming pc setup, where some of the display outs are connected to say 2 monitors for an example, and one hdmi out is connected to a tv.
+
+This extension would be able to have multiple setups saved (screen configuration along with their settings, positions, refresh rates, etc) and save them for multiple setups (desk setup, tv setup, both, steam big picture)
+
+The extension should add a button to the quick settings (similar to wifi or bluetooth) and when clicked should open a dropdown allowing the user to select the setup they want. Then the user has the option of a few setups they have saved, clicking one immediately applies the changes and the screen activate or deactivate accordingly.
+
+In addition, as part of a setup, the user may also pick to run a certain command when a setup is swapped to, like opening steam big picture mode. So that in the case of just swapping from a desk to a couch setup, it can be as quick and painless as possible.
+
+Another option should be the boot setup (when the system boots, what setup should it have by default) or, included in this, an additional setting included in this default setup, that allows the user to boot into the same setup they shutdown from.
+
+I also imagine the settings page of the extension to have two tabs. One with details about saving the current setup, with name, save button, etc. alter any existing setups, delete, overwrite and so on. And another tab about toggling the things above. Default setup (picking between saved setups), setup at boot (pick between saved setups or another option called something like "remember setup after shutdown), and any other settings like that.
+
+I am currently doing something similar like this on my gaming pc using commands and a button that toggles on and off and runs commands depending on it's state, but an extension would be a much better way to do it. Go ahead and ask questions related to this setup to clear out any gray areas before starting the work on it. After we consolidate any questions, go ahead and start. 

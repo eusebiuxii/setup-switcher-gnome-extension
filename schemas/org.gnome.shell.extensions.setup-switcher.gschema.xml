@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.setup-switcher"
+          path="/org/gnome/shell/extensions/setup-switcher/">
+
+    <key name="setups" type="s">
+      <default>'[]'</default>
+      <summary>Saved setups</summary>
+      <description>JSON array of saved setups (display layout, audio output and commands).</description>
+    </key>
+
+    <key name="login-setup" type="s">
+      <default>''</default>
+      <summary>Setup applied at login</summary>
+      <description>Empty: do not change anything. "__last__": the last used setup. Otherwise the id of a saved setup.</description>
+    </key>
+
+    <key name="last-setup" type="s">
+      <default>''</default>
+      <summary>Last used setup</summary>
+      <description>Id of the last setup that was applied or detected as active.</description>
+    </key>
+
+    <key name="run-commands-at-login" type="b">
+      <default>true</default>
+      <summary>Run the setup's commands when it is applied at login</summary>
+    </key>
+
+    <key name="confirm-changes" type="b">
+      <default>true</default>
+      <summary>Ask to keep display changes</summary>
+      <description>Show GNOME's "Keep these display settings?" dialog after switching. Changes revert automatically if not confirmed.</description>
+    </key>
+
+    <key name="hide-unavailable" type="b">
+      <default>false</default>
+      <summary>Hide setups whose screens are not connected</summary>
+    </key>
+  </schema>
+</schemalist>

@@ -1,0 +1,9 @@
+{
+  "uuid": "setup-switcher@local",
+  "name": "Setup Switcher",
+  "description": "Save display setups (screens, resolution, refresh rate, scale, position), audio output and launch commands, and switch between them from Quick Settings. Great for desk / TV / couch gaming setups.",
+  "shell-version": ["47", "48", "49", "50", "51"],
+  "settings-schema": "org.gnome.shell.extensions.setup-switcher",
+  "version-name": "1.0",
+  "url": ""
+}
