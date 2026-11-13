@@ -100,7 +100,7 @@ class PrefsController {
     }
 
     _toast(title) {
-        this._window.add_toast(new Adw.Toast({title, timeout: 4}));
+        this._window.add_toast(new Adw.Toast({title, timeout: 4, use_markup: false}));
     }
 
     _confirm(heading, body, actionLabel, destructive, onConfirm) {
@@ -141,6 +141,7 @@ class PrefsController {
             title: 'Current screens',
             subtitle: 'Reading display configuration…',
             subtitle_lines: 0,
+            use_markup: false,
         });
         const displaysButton = new Gtk.Button({
             label: 'Display Settings',
@@ -319,6 +320,7 @@ class PrefsController {
             title: setup.name,
             subtitle: this._setupSubtitle(setup),
             expanded: this._expanded.has(setup.id),
+            use_markup: false,
         });
         row.connect('notify::expanded', () => {
             if (row.expanded)
@@ -366,6 +368,7 @@ class PrefsController {
                     title: `${m.displayName} (${m.connector})`,
                     subtitle: Display.describeMonitor(m, lm) + (missing ? ' · not available right now' : ''),
                     icon_name: 'video-display-symbolic',
+                    use_markup: false,
                 }));
             }
         }
