@@ -1,5 +1,8 @@
 import Adw from 'gi://Adw';
+import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
@@ -131,18 +134,16 @@ class PrefsController {
         // Save current layout
         const saveGroup = new Adw.PreferencesGroup({
             title: 'Save Current Layout',
-            description: 'Arrange your screens in Settings → Displays first (which screens are on, ' +
-                'resolution, refresh rate, scale, position). Then name the layout, pick the audio ' +
-                'output it should use and save it as a setup.',
+            description: 'Arrange your screens in Display Settings, then save them as a setup.',
         });
         page.add(saveGroup);
 
-        this._currentRow = new Adw.ActionRow({
+        this._currentRow = new Adw.ExpanderRow({
             title: 'Current screens',
             subtitle: 'Reading display configuration…',
-            subtitle_lines: 0,
             use_markup: false,
         });
+        this._currentScreenRows = [];
         const displaysButton = new Gtk.Button({
             label: 'Display Settings',
             valign: Gtk.Align.CENTER,
@@ -157,13 +158,10 @@ class PrefsController {
         this._currentRow.add_suffix(displaysButton);
         saveGroup.add(this._currentRow);
 
-        this._newName = new Adw.EntryRow({title: 'Setup name (e.g. Desk, TV, Couch gaming)'});
+        this._newName = new Adw.EntryRow({title: 'Name (e.g. Desk, TV, Couch gaming)'});
         saveGroup.add(this._newName);
 
-        this._newAudio = new Adw.ComboRow({
-            title: 'Audio output',
-            subtitle: 'Sound switches to this output whenever the setup is applied',
-        });
+        this._newAudio = new Adw.ComboRow({title: 'Audio output'});
         this._newAudioChoices = [null];
         saveGroup.add(this._newAudio);
 
@@ -175,23 +173,26 @@ class PrefsController {
             }));
         }
 
-        this._newOnEnter = new Adw.EntryRow({
-            title: 'Command when switching to this setup (optional)',
-            tooltip_text: COMMAND_HINT,
+        const commands = new Adw.ExpanderRow({
+            title: 'Commands',
+            subtitle: 'Optional',
         });
-        this._newOnLeave = new Adw.EntryRow({
-            title: 'Command when switching away from this setup (optional)',
-            tooltip_text: COMMAND_HINT,
-        });
-        saveGroup.add(this._newOnEnter);
-        saveGroup.add(this._newOnLeave);
+        this._newOnEnter = new Adw.EntryRow({title: 'On switching to', tooltip_text: COMMAND_HINT});
+        this._newOnLeave = new Adw.EntryRow({title: 'On switching away', tooltip_text: COMMAND_HINT});
+        commands.add_row(this._newOnEnter);
+        commands.add_row(this._newOnLeave);
+        saveGroup.add(commands);
 
-        const saveButton = new Adw.ButtonRow({
-            title: 'Save Setup',
-            start_icon_name: 'document-save-symbolic',
-            css_classes: ['suggested-action'],
+        const saveButton = new Gtk.Button({
+            child: new Adw.ButtonContent({
+                label: 'Save Setup',
+                icon_name: 'document-save-symbolic',
+            }),
+            css_classes: ['suggested-action', 'pill'],
+            height_request: 48,
+            margin_top: 12,
         });
-        saveButton.connect('activated', () => this._saveNewSetup());
+        saveButton.connect('clicked', () => this._saveNewSetup());
         saveGroup.add(saveButton);
 
         // Saved setups
@@ -211,13 +212,37 @@ class PrefsController {
     _updateCurrentLayout() {
         if (!this._state)
             return;
+        for (const r of this._currentScreenRows)
+            this._currentRow.remove(r);
+        this._currentScreenRows = [];
+
         const layout = Display.captureLayout(this._state);
-        const lines = layout.logicalMonitors.flatMap(lm => lm.monitors.map(m =>
-            `${m.displayName} (${m.connector}): ${Display.describeMonitor(m, lm)}`));
-        const off = this._state.monitors.filter(m =>
-            !this._state.logicalMonitors.some(lm => lm.connectors.includes(m.connector)));
-        lines.push(...off.map(m => `${m.displayName} (${m.connector}): off`));
-        this._currentRow.subtitle = lines.join('\n');
+        const on = layout.logicalMonitors.flatMap(lm => lm.monitors.map(m =>
+            this._screenRow(m, Display.describeMonitor(m, lm))));
+        const off = this._state.monitors
+            .filter(m => !this._state.logicalMonitors.some(lm => lm.connectors.includes(m.connector)))
+            .map(m => this._screenRow(m, 'Off', true));
+        for (const r of [...on, ...off]) {
+            this._currentRow.add_row(r);
+            this._currentScreenRows.push(r);
+        }
+        this._currentRow.subtitle = this._screenCount(on.length) +
+            (off.length ? ` on · ${off.length} off` : '');
+    }
+
+    _screenCount(n) {
+        return `${n} screen${n === 1 ? '' : 's'}`;
+    }
+
+    _screenRow(monitor, details, dim = false) {
+        return new Adw.ActionRow({
+            title: monitor.displayName,
+            subtitle: details,
+            tooltip_text: monitor.connector,
+            icon_name: 'video-display-symbolic',
+            css_classes: dim ? ['dim-label'] : [],
+            use_markup: false,
+        });
     }
 
     /** Builds a combo of audio outputs; returns [row, choices] where choices[i] is the stored audio object. */
@@ -310,9 +335,11 @@ class PrefsController {
     }
 
     _setupSubtitle(setup) {
-        const parts = [Display.summarizeLayout(setup.layout)];
-        parts.push(setup.audio ? `Audio: ${setup.audio.description}` : 'Audio unchanged');
-        return parts.join(' · ');
+        const count = Display.layoutMonitors(setup.layout).length;
+        return [
+            this._screenCount(count),
+            setup.audio ? setup.audio.description : 'Audio unchanged',
+        ].join(' · ');
     }
 
     _buildSetupRow(setup, index, count) {
@@ -322,6 +349,7 @@ class PrefsController {
             expanded: this._expanded.has(setup.id),
             use_markup: false,
         });
+        this._makeDraggable(row, setup);
         row.connect('notify::expanded', () => {
             if (row.expanded)
                 this._expanded.add(setup.id);
@@ -364,12 +392,8 @@ class PrefsController {
         for (const lm of setup.layout.logicalMonitors) {
             for (const m of lm.monitors) {
                 const missing = connected?.problems.some(p => p.startsWith(m.displayName));
-                row.add_row(new Adw.ActionRow({
-                    title: `${m.displayName} (${m.connector})`,
-                    subtitle: Display.describeMonitor(m, lm) + (missing ? ' · not available right now' : ''),
-                    icon_name: 'video-display-symbolic',
-                    use_markup: false,
-                }));
+                row.add_row(this._screenRow(m,
+                    Display.describeMonitor(m, lm) + (missing ? ' · not connected' : ''), missing));
             }
         }
 
@@ -377,7 +401,6 @@ class PrefsController {
         const {choices, model, selected} = this._audioChoices(setup.audio);
         const audioRow = new Adw.ComboRow({
             title: 'Audio output',
-            subtitle: 'Sound switches to this output when the setup is applied',
             model,
             selected,
         });
@@ -391,8 +414,8 @@ class PrefsController {
 
         // Commands
         for (const [key, title] of [
-            ['onEnter', 'Command when switching to this setup'],
-            ['onLeave', 'Command when switching away from this setup'],
+            ['onEnter', 'Command on switching to'],
+            ['onLeave', 'Command on switching away'],
         ]) {
             const entry = new Adw.EntryRow({
                 title,
@@ -447,6 +470,63 @@ class PrefsController {
         return row;
     }
 
+    /** Adds a drag handle to a setup row and lets other setup rows be dropped onto it. */
+    _makeDraggable(row, setup) {
+        const handle = new Gtk.Image({
+            icon_name: 'list-drag-handle-symbolic',
+            tooltip_text: 'Drag to reorder',
+            css_classes: ['dim-label'],
+            cursor: Gdk.Cursor.new_from_name('grab', null),
+        });
+        row.add_prefix(handle);
+
+        const source = new Gtk.DragSource({actions: Gdk.DragAction.MOVE});
+        source.connect('prepare', () => Gdk.ContentProvider.new_for_value(setup.id));
+        source.connect('drag-begin', (_src, drag) => {
+            const icon = Gtk.DragIcon.get_for_drag(drag);
+            const preview = new Adw.PreferencesGroup({width_request: row.get_width()});
+            preview.add(new Adw.ActionRow({title: setup.name, use_markup: false}));
+            icon.child = preview;
+            drag.set_hotspot(16, 16);
+        });
+        handle.add_controller(source);
+
+        // Pressing the handle collapses the row. The press is claimed so the
+        // row header doesn't also toggle it open; grouping with the drag
+        // source keeps dragging working.
+        const press = new Gtk.GestureClick();
+        press.group(source);
+        press.connect('pressed', () => {
+            press.set_state(Gtk.EventSequenceState.CLAIMED);
+            row.expanded = false;
+        });
+        handle.add_controller(press);
+
+        const target = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.MOVE);
+        target.connect('drop', (_t, draggedId) => {
+            if (draggedId === setup.id)
+                return false;
+            // Rebuilding destroys this row, so do it after the drop finishes.
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                this._moveTo(draggedId, setup.id);
+                return GLib.SOURCE_REMOVE;
+            });
+            return true;
+        });
+        row.add_controller(target);
+    }
+
+    _moveTo(id, targetId) {
+        const setups = this._setups();
+        const from = setups.findIndex(s => s.id === id);
+        const to = setups.findIndex(s => s.id === targetId);
+        if (from < 0 || to < 0 || from === to)
+            return;
+        const [moved] = setups.splice(from, 1);
+        setups.splice(to, 0, moved);
+        this._writeSetups(setups, {rebuild: true});
+    }
+
     _move(id, delta) {
         const setups = this._setups();
         const i = setups.findIndex(s => s.id === id);
@@ -488,22 +568,17 @@ class PrefsController {
             icon_name: 'preferences-system-symbolic',
         });
 
-        const loginGroup = new Adw.PreferencesGroup({
-            title: 'At Login',
-            description: 'Applied when your session starts. Setups whose screens are not connected are skipped.',
-        });
+        const loginGroup = new Adw.PreferencesGroup({title: 'At Login'});
         page.add(loginGroup);
 
-        this._loginRow = new Adw.ComboRow({
-            title: 'Setup at login',
-            subtitle: '"Remember last used setup" restores the setup you were using when you logged out or shut down',
-        });
+        this._loginRow = new Adw.ExpanderRow({title: 'Setup at login', use_markup: false});
+        this._loginOptionRows = [];
         loginGroup.add(this._loginRow);
         this._rebuildLoginModel();
 
         const runAtLogin = new Adw.SwitchRow({
             title: 'Run setup commands at login',
-            subtitle: 'Also run the "switching to" command (e.g. start Steam Big Picture) of the login setup',
+            subtitle: 'Also run the setup\'s "switching to" command',
         });
         this._settings.bind('run-commands-at-login', runAtLogin, 'active', Gio.SettingsBindFlags.DEFAULT);
         loginGroup.add(runAtLogin);
@@ -512,16 +587,15 @@ class PrefsController {
         page.add(switchGroup);
 
         const confirm = new Adw.SwitchRow({
-            title: 'Ask to keep changes',
-            subtitle: 'Show the "Keep these display settings?" dialog after switching. If you don\'t ' +
-                'confirm, the screens revert automatically, and audio and commands are not run.',
+            title: 'Ask to keep changes when switching',
+            subtitle: 'Screens revert if you don\'t confirm',
         });
         this._settings.bind('confirm-changes', confirm, 'active', Gio.SettingsBindFlags.DEFAULT);
         switchGroup.add(confirm);
 
         const hide = new Adw.SwitchRow({
             title: 'Hide unavailable setups',
-            subtitle: 'Hide setups whose screens are not connected instead of greying them out',
+            subtitle: 'Instead of greying out setups whose screens aren\'t connected',
         });
         this._settings.bind('hide-unavailable', hide, 'active', Gio.SettingsBindFlags.DEFAULT);
         switchGroup.add(hide);
@@ -530,17 +604,45 @@ class PrefsController {
     }
 
     _rebuildLoginModel() {
-        const setups = this._setups();
-        const values = [LOGIN_NONE, LOGIN_LAST, ...setups.map(s => s.id)];
-        const labels = ["Don't change", 'Remember last used setup', ...setups.map(s => s.name)];
+        const options = [
+            {value: LOGIN_NONE, title: "Don't change", subtitle: 'Keep the screens GNOME starts with'},
+            {value: LOGIN_LAST, title: 'Remember last used', subtitle: 'Restore the setup in use when you logged out'},
+            ...this._setups().map(s => ({value: s.id, title: s.name, subtitle: null})),
+        ];
+        const stored = this._settings.get_string('login-setup');
+        const current = options.some(o => o.value === stored) ? stored : LOGIN_NONE;
 
-        if (this._loginId)
-            this._loginRow.disconnect(this._loginId);
-        this._loginRow.model = Gtk.StringList.new(labels);
-        const current = this._settings.get_string('login-setup');
-        this._loginRow.selected = Math.max(0, values.indexOf(current));
-        this._loginId = this._loginRow.connect('notify::selected', () => {
-            this._settings.set_string('login-setup', values[this._loginRow.selected] ?? LOGIN_NONE);
-        });
+        for (const r of this._loginOptionRows)
+            this._loginRow.remove(r);
+        this._loginOptionRows = [];
+
+        let group = null;
+        for (const option of options) {
+            const check = new Gtk.CheckButton({
+                active: option.value === current,
+                valign: Gtk.Align.CENTER,
+            });
+            if (group)
+                check.group = group;
+            else
+                group = check;
+            const row = new Adw.ActionRow({
+                title: option.title,
+                subtitle: option.subtitle ?? '',
+                activatable_widget: check,
+                use_markup: false,
+            });
+            row.add_prefix(check);
+            check.connect('toggled', () => {
+                if (!check.active)
+                    return;
+                this._settings.set_string('login-setup', option.value);
+                this._loginRow.subtitle = option.title;
+            });
+            this._loginRow.add_row(row);
+            this._loginOptionRows.push(row);
+            if (option.value === current)
+                this._loginRow.subtitle = option.title;
+        }
     }
 }
